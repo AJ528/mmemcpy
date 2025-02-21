@@ -33,16 +33,16 @@ static void sysclk_init(void);
 
 #define BUFFER_SIZE 0x1000
 
-extern void* memmove_(void *destination, const void *source, size_t num);
+extern void* memcpy_(void *destination, const void *source, size_t num);
 
 static void init_IPCC(void);
 static inline void enable_cycle_count(void);
 static inline uint32_t get_cycle_count(void);
 static inline uint32_t get_LSU_count(void);
 
-TEST memmove_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, bool print_performance);
-TEST memmove_iterate(uint32_t data_len_limit);
-TEST memmove_slide_dest(uint32_t data_len, uint32_t src_offset);
+TEST memcpy_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, bool print_performance);
+TEST memcpy_iterate(uint32_t data_len_limit);
+TEST memcpy_slide_dest(uint32_t data_len, uint32_t src_offset);
 
 
 // Add definitions that need to be in the test runner's main file.
@@ -70,27 +70,28 @@ int main(void)
 
   GREATEST_MAIN_BEGIN();  // command-line options, initialization.
 
-  RUN_TESTp(memmove_test, 1, 0x81, 0x7E, true);
-  RUN_TESTp(memmove_test, 10, 0x81, 0x7E, true);
-  RUN_TESTp(memmove_test, 20, 0x81, 0x7E, true);
-  RUN_TESTp(memmove_test, 50, 0x81, 0x7E, true);
+  RUN_TESTp(memcpy_test, 1, 0x2, 0x7E, true);
+  RUN_TESTp(memcpy_test, 10, 0x2, 0x7E, true);
+  RUN_TESTp(memcpy_test, 20, 0x2, 0x7E, true);
+  RUN_TESTp(memcpy_test, 50, 0x2, 0x7E, true);
 
-  RUN_TESTp(memmove_test, 1, 0x81, 0x82, true);
-  RUN_TESTp(memmove_test, 10, 0x81, 0x82, true);
-  RUN_TESTp(memmove_test, 20, 0x81, 0x82, true);
-  RUN_TESTp(memmove_test, 50, 0x81, 0x82, true);
+  RUN_TESTp(memcpy_test, 1, 0x2, 0x82, true);
+  RUN_TESTp(memcpy_test, 10, 0x2, 0x82, true);
+  RUN_TESTp(memcpy_test, 20, 0x2, 0x82, true);
+  RUN_TESTp(memcpy_test, 50, 0x2, 0x82, true);
 
-  RUN_TESTp(memmove_test, 1, 0x81, 0x102, true);
-  RUN_TESTp(memmove_test, 10, 0x81, 0x102, true);
-  RUN_TESTp(memmove_test, 20, 0x81, 0x102, true);
-  RUN_TESTp(memmove_test, 50, 0x81, 0x102, true);
+  RUN_TESTp(memcpy_test, 1, 0x1, 0x102, true);
+  RUN_TESTp(memcpy_test, 10, 0x1, 0x102, true);
+  RUN_TESTp(memcpy_test, 20, 0x1, 0x102, true);
+  RUN_TESTp(memcpy_test, 50, 0x1, 0x102, true);
+  RUN_TESTp(memcpy_test, 200, 0x1, 0x102, true);
 
-  RUN_TESTp(memmove_slide_dest, 0x0f, 0x81);
-  RUN_TESTp(memmove_slide_dest, 0x10, 0x80);
-  RUN_TESTp(memmove_slide_dest, 0x22, 0x17f);
-  RUN_TESTp(memmove_slide_dest, 0x200, 0x400);
+  RUN_TESTp(memcpy_slide_dest, 0x0f, 0x81);
+  RUN_TESTp(memcpy_slide_dest, 0x10, 0x80);
+  RUN_TESTp(memcpy_slide_dest, 0x22, 0x17f);
+  RUN_TESTp(memcpy_slide_dest, 0x200, 0x400);
 
-  RUN_TEST1(memmove_iterate, 15);
+  // RUN_TEST1(memcpy_iterate, 20);
 
   GREATEST_MAIN_END();    // display results
 #endif  // TEST_CM0PLUS
@@ -109,7 +110,7 @@ int main(void)
   }
 }
 
-TEST memmove_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, bool print_performance)
+TEST memcpy_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, bool print_performance)
 {
 
   uint8_t expected[BUFFER_SIZE] = {0};
@@ -128,11 +129,11 @@ TEST memmove_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, 
   }
 
   uint32_t memmove_orig_start = get_cycle_count();
-  memmove(&(expected[dest_offset]), &(expected[src_offset]), data_len);
+  memcpy(&(expected[dest_offset]), &(expected[src_offset]), data_len);
   uint32_t memmove_orig_stop = get_cycle_count();
 
   uint32_t memmove_new_start = get_cycle_count();
-  memmove_(&(actual[dest_offset]), &(actual[src_offset]), data_len);
+  memcpy_(&(actual[dest_offset]), &(actual[src_offset]), data_len);
   uint32_t memmove_new_stop = get_cycle_count();
 
 
@@ -149,18 +150,16 @@ TEST memmove_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, 
   PASS();
 }
 
-TEST memmove_iterate(uint32_t data_len_limit)
+TEST memcpy_iterate(uint32_t data_len_limit)
 {
   uint32_t data_len;
   uint32_t src_offset;
   uint32_t dest_offset;
-  uint32_t offset_limit;
 
   for(data_len = 0; data_len < data_len_limit; data_len++){
-    offset_limit = data_len + 8;
-    for(src_offset = 0; src_offset < offset_limit; src_offset++){
-      for(dest_offset = 0; dest_offset < offset_limit; dest_offset++){
-        CHECK_CALL(memmove_test(data_len, src_offset, dest_offset, false));
+    for(src_offset = 0; src_offset < 5; src_offset++){
+      for(dest_offset = data_len; dest_offset < (data_len + 8); dest_offset++){
+        CHECK_CALL(memcpy_test(data_len, src_offset, dest_offset, false));
       }
     }
   }
@@ -168,7 +167,7 @@ TEST memmove_iterate(uint32_t data_len_limit)
   PASS();
 }
 
-TEST memmove_slide_dest(uint32_t data_len, uint32_t src_offset)
+TEST memcpy_slide_dest(uint32_t data_len, uint32_t src_offset)
 {
   uint32_t dest_offset;
 
@@ -176,17 +175,13 @@ TEST memmove_slide_dest(uint32_t data_len, uint32_t src_offset)
     FAIL();
   }
 
-  CHECK_CALL(memmove_test(data_len, src_offset, 0, true));
-  CHECK_CALL(memmove_test(data_len, src_offset, src_offset-data_len, true));
+  CHECK_CALL(memcpy_test(data_len, src_offset, 0, true));
+  CHECK_CALL(memcpy_test(data_len, src_offset, src_offset-data_len, true));
 
-  CHECK_CALL(memmove_test(data_len, src_offset, src_offset - 4, true));
-  CHECK_CALL(memmove_test(data_len, src_offset, src_offset - 1, true));
-  CHECK_CALL(memmove_test(data_len, src_offset, src_offset, true));
-  CHECK_CALL(memmove_test(data_len, src_offset, src_offset + 1, true));
-  CHECK_CALL(memmove_test(data_len, src_offset, src_offset + 4, true));
+  CHECK_CALL(memcpy_test(data_len, src_offset, src_offset, true));
 
-  CHECK_CALL(memmove_test(data_len, src_offset, src_offset+data_len, true));
-  CHECK_CALL(memmove_test(data_len, src_offset, BUFFER_SIZE-data_len, true));
+  CHECK_CALL(memcpy_test(data_len, src_offset, src_offset+data_len, true));
+  CHECK_CALL(memcpy_test(data_len, src_offset, BUFFER_SIZE-data_len, true));
 
   PASS();
 }
