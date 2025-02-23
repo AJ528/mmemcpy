@@ -160,10 +160,12 @@ TEST memcpy_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, b
     actual[src_offset + i] = i;
   }
 
+  memcpy(&(expected[dest_offset]), &(expected[src_offset]), data_len);
   uint32_t memcpy_orig_start = get_cycle_count();
   memcpy(&(expected[dest_offset]), &(expected[src_offset]), data_len);
   uint32_t memcpy_orig_stop = get_cycle_count();
 
+  memcpy_(&(actual[dest_offset]), &(actual[src_offset]), data_len);
   uint32_t memcpy_new_start = get_cycle_count();
   memcpy_(&(actual[dest_offset]), &(actual[src_offset]), data_len);
   uint32_t memcpy_new_stop = get_cycle_count();
