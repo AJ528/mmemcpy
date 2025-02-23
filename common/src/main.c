@@ -23,13 +23,22 @@ volatile uint8_t *cpu2InitDone = (uint8_t *)0x2000FFFF;
 
 volatile uint32_t *cycle_count = (uint32_t *)0x2000FFF0;
 
+#if defined(CORE_CM0PLUS)
 static uint32_t min_cycles;
+#endif
+
+#if defined(CORE_CM4)
+static inline void enable_cycle_count(void);
+static inline uint32_t get_LSU_count(void);
+#endif
 
 static void UART_init(void);
 static void sysclk_init(void);
 static void init_IPCC(void);
 
-inline static uint32_t get_cycle_count(void);
+static inline uint32_t get_cycle_count(void);
+
+static void run_test(void);
 
 TEST memcpy_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, bool print_performance);
 TEST memcpy_iterate(uint32_t data_len_limit);
@@ -46,25 +55,63 @@ extern uint32_t _vector_table_offset;
 int main(void)
 {
   SCB->VTOR = (uint32_t)(&_vector_table_offset);  // set the vector table offset
-
-  *cpu2InitDone = CPU2_INITIALISED;
   sysclk_init();
+#if defined(CORE_CM0PLUS)
+  *cpu2InitDone = CPU2_INITIALISED;
+#endif
+#if defined(CORE_CM4)
+  LL_PWR_DisableBootC2();
+  enable_cycle_count();
+#endif
 
 #if (TEST_CM0PLUS)
-  UART_init();
   init_IPCC();
-
+#if defined(CORE_CM0PLUS)
+  UART_init();
   print_newline();
   println_("***Cortex-M0+ Test***");
-
   uint32_t curr_cycle = get_cycle_count();
   uint32_t new_cycle = get_cycle_count();
   min_cycles = new_cycle-curr_cycle;
   printfln_("min cycles is %u", new_cycle-curr_cycle);
+  run_test();
+#endif
+
+#if defined(CORE_CM4)
+  *cpu2InitDone = CPU2_NOT_INITIALISED;
+  LL_PWR_EnableBootC2();
+  while (*cpu2InitDone != CPU2_INITIALISED);
+#endif
+
+#else
+
+#if defined(CORE_CM4)
+  UART_init();
+  print_newline();
+  println_("Cortex-M4 Test");
+  run_test();
+#endif
+
+#endif
 
 
 
+  while (1)
+  {
+#if (TEST_CM0PLUS) && defined(CORE_CM4)
+    // wait for IPCC trigger
+    if(LL_C2_IPCC_IsActiveFlag_CHx(IPCC, LL_IPCC_CHANNEL_1) == LL_IPCC_CHANNEL_1){
+      *cycle_count = get_cycle_count();
+      LL_C1_IPCC_ClearFlag_CHx(IPCC, LL_IPCC_CHANNEL_1);
+    }
+#else
+    LL_mDelay(1000);
+#endif
+  }
+}
 
+static void run_test(void)
+{
   printfln_("%-6s %-10s %-10s %-8s %-8s %-8s", "d_len", "src_off", "dest_off", "o_cycle", "n_cycle", "c_diff");
 
   GREATEST_MAIN_BEGIN();  // command-line options, initialization.
@@ -79,25 +126,20 @@ int main(void)
   RUN_TESTp(memcpy_test, 20, 0x2, 0x82, true);
   RUN_TESTp(memcpy_test, 50, 0x2, 0x82, true);
 
-  RUN_TESTp(memcpy_test, 1, 0x1, 0x53, true);
-  RUN_TESTp(memcpy_test, 10, 0x1, 0x53, true);
-  RUN_TESTp(memcpy_test, 20, 0x1, 0x53, true);
-  RUN_TESTp(memcpy_test, 50, 0x1, 0x53, true);
+  RUN_TESTp(memcpy_test, 1, 0x1, 0x102, true);
+  RUN_TESTp(memcpy_test, 10, 0x1, 0x102, true);
+  RUN_TESTp(memcpy_test, 20, 0x1, 0x102, true);
+  RUN_TESTp(memcpy_test, 50, 0x1, 0x102, true);
+  RUN_TESTp(memcpy_test, 200, 0x1, 0x102, true);
 
   RUN_TESTp(memcpy_slide_dest, 0x0f, 0x81);
   RUN_TESTp(memcpy_slide_dest, 0x10, 0x80);
-  RUN_TESTp(memcpy_slide_dest, 0x22, 0x7f);
+  RUN_TESTp(memcpy_slide_dest, 0x22, 0x17f);
   RUN_TESTp(memcpy_slide_dest, 0x200, 0x400);
 
-  // RUN_TEST1(memcpy_iterate, 15);
+  // RUN_TEST1(memcpy_iterate, 20);
 
   GREATEST_MAIN_END();    // display results
-#endif
-
-  while (1)
-  {
-  	LL_mDelay(1000);
-  }
 }
 
 TEST memcpy_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, bool print_performance)
@@ -129,8 +171,8 @@ TEST memcpy_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, b
 
 
   if(print_performance){
-    uint32_t orig_cycle = memmove_orig_stop-memmove_orig_start-min_cycles;
-    uint32_t new_cycle = memmove_new_stop-memmove_new_start-min_cycles;
+    uint32_t orig_cycle = memmove_orig_stop-memmove_orig_start;
+    uint32_t new_cycle = memmove_new_stop-memmove_new_start;
     int32_t cycle_diff = orig_cycle - new_cycle;
     printfln_("%-6u %-#10x %-#10x %-8u %-8u %-8d", data_len, src_offset, dest_offset, orig_cycle, new_cycle, cycle_diff);
   }
@@ -145,12 +187,10 @@ TEST memcpy_iterate(uint32_t data_len_limit)
   uint32_t data_len;
   uint32_t src_offset;
   uint32_t dest_offset;
-  uint32_t offset_limit;
 
   for(data_len = 0; data_len < data_len_limit; data_len++){
-    offset_limit = data_len + 8;
-    for(src_offset = 0; src_offset < offset_limit; src_offset++){
-      for(dest_offset = 0; dest_offset < offset_limit; dest_offset++){
+    for(src_offset = 0; src_offset < 5; src_offset++){
+      for(dest_offset = data_len; dest_offset < (data_len + 8); dest_offset++){
         CHECK_CALL(memcpy_test(data_len, src_offset, dest_offset, false));
       }
     }
@@ -178,19 +218,44 @@ TEST memcpy_slide_dest(uint32_t data_len, uint32_t src_offset)
   PASS();
 }
 
-static void init_IPCC(void)
+#if defined(CORE_CM4)
+static inline void enable_cycle_count(void)
 {
-  LL_C2_AHB3_GRP1_EnableClock(LL_C2_AHB3_GRP1_PERIPH_IPCC);
+  CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+  DWT->CYCCNT = 0;
+  DWT->LSUCNT = 0;
+  DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk | DWT_CTRL_LSUEVTENA_Msk;
 }
 
-inline static uint32_t get_cycle_count(void)
+static inline uint32_t get_LSU_count(void)
 {
+  return (DWT->LSUCNT) & 0xFF;
+}
+
+#endif
+
+static void init_IPCC(void)
+{
+#if defined(CORE_CM0PLUS)
+  LL_C2_AHB3_GRP1_EnableClock(LL_C2_AHB3_GRP1_PERIPH_IPCC);
+#endif
+#if defined(CORE_CM4)
+  LL_AHB3_GRP1_EnableClock(LL_AHB3_GRP1_PERIPH_IPCC);
+#endif
+}
+
+static inline uint32_t get_cycle_count(void)
+{
+#if defined(CORE_CM0PLUS)
   LL_C2_IPCC_SetFlag_CHx(IPCC, LL_IPCC_CHANNEL_1);
   while(LL_C2_IPCC_IsActiveFlag_CHx(IPCC, LL_IPCC_CHANNEL_1)){}
   uint32_t current_cycle = *cycle_count;
   return current_cycle;
+#endif
+#if defined(CORE_CM4)
+  return DWT->CYCCNT;
+#endif
 }
-
 
 /******* Communication Functions *******/
 
@@ -205,6 +270,40 @@ int32_t putchar_(char c)
 
 static void sysclk_init(void)
 {
+#if defined(CORE_CM4)
+  //set up to run off the 48MHz MSI clock
+  LL_FLASH_SetLatency(LL_FLASH_LATENCY_2);
+  while(LL_FLASH_GetLatency() != LL_FLASH_LATENCY_2)
+  {
+  }
+
+  // Configure the main internal regulator output voltage
+  // set voltage scale to range 1, the high performance mode
+  // this sets the internal main regulator to 1.2V and SYSCLK can be up to 64MHz
+  LL_PWR_SetRegulVoltageScaling(LL_PWR_REGU_VOLTAGE_SCALE1);
+  while(LL_PWR_IsActiveFlag_VOS() == 1); // delay until VOS flag is 0
+
+  // enable a wider range of MSI clock frequencies
+  LL_RCC_MSI_EnableRangeSelection();
+
+  /* Insure MSIRDY bit is set before writing MSIRANGE value */
+  while (LL_RCC_MSI_IsReady() == 0U)
+  {}
+
+  /* Set MSIRANGE default value */
+  LL_RCC_MSI_SetRange(LL_RCC_MSIRANGE_11);
+
+
+  // delay until MSI is ready
+  while (LL_RCC_MSI_IsReady() == 0U)
+  {}
+
+  // delay until MSI is system clock
+  while (LL_RCC_GetSysClkSource() != LL_RCC_SYS_CLKSOURCE_STATUS_MSI)
+  {}
+
+#endif
+
   // update the global variable SystemCoreClock
   SystemCoreClockUpdate();
 
@@ -217,13 +316,23 @@ static void sysclk_init(void)
 static void UART_init(void)
 {
   // enable the UART GPIO port clock
+#if defined(CORE_CM0PLUS)
   LL_C2_AHB2_GRP1_EnableClock(LL_C2_AHB2_GRP1_PERIPH_GPIOA);
+#endif
+#if defined(CORE_CM4)
+  LL_AHB2_GRP1_EnableClock(LL_AHB2_GRP1_PERIPH_GPIOA);
+#endif
 
   // set the LPUART clock source to the peripheral clock
   LL_RCC_SetLPUARTClockSource(LL_RCC_LPUART1_CLKSOURCE_PCLK1);
 
   // enable clock for LPUART
+#if defined(CORE_CM0PLUS)
   LL_C2_APB1_GRP2_EnableClock(LL_C2_APB1_GRP2_PERIPH_LPUART1);
+#endif
+#if defined(CORE_CM4)
+  LL_APB1_GRP2_EnableClock(LL_APB1_GRP2_PERIPH_LPUART1);
+#endif
 
   // configure GPIO pins for LPUART1 communication
   // TX Pin is PA2, RX Pin is PA3

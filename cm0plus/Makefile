@@ -28,6 +28,7 @@ TARGET_BIN := $(BIN_DIR)/$(TARGET_NAME).bin
 # these locations should be specified relative to the makefile location.
 SRC_DIRS = \
 	src \
+	../common/src \
 	../common/utilities \
 	../common/stm32wl_drivers/stm32wlxx_low_level
 
