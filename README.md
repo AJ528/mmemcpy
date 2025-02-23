@@ -5,7 +5,7 @@
 Does everything I need it to. Will fix bugs as I come across them.
 
 ### How to use this in an embedded project
-1. Copy `mmemcpy.s` from the common/utilities folder into your project
+1. Copy `mmemcpy.s` from the common/src folder into your project
 2. Add a function declaration for `memcpy_()` somewhere in your project. The function declaration should look something like `extern void* memcpy_(void *destination, const void *source, size_t num);`.
 3. Use `memcpy_()` just like you would the normal `memcpy()` function.
 4. Done!
