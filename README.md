@@ -19,7 +19,7 @@ Does everything I need it to. Will fix bugs as I come across them.
 
 ### Details
 
-Compiles down to 132 bytes on `arm-none-eabi-gcc`. memmove is about 80 lines of code (per David A. Wheeler's `SLOCCount`).
+Compiles down to 132 bytes on `arm-none-eabi-gcc`. mmemcpy.s is about 80 lines of code (per David A. Wheeler's `SLOCCount`).
 
 In my testing, `memcpy_()` is always faster than the standard `memcpy()` used on the Cortex-M0+ core. It is slower than the `memcpy()` used on the Cortex-M4, primarily because my implemention doesn't perform unaligned memory access.
 

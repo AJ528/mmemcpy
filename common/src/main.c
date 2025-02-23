@@ -160,19 +160,19 @@ TEST memcpy_test(uint32_t data_len, uint32_t src_offset, uint32_t dest_offset, b
     actual[src_offset + i] = i;
   }
 
-  uint32_t memmove_orig_start = get_cycle_count();
+  uint32_t memcpy_orig_start = get_cycle_count();
   memcpy(&(expected[dest_offset]), &(expected[src_offset]), data_len);
-  uint32_t memmove_orig_stop = get_cycle_count();
+  uint32_t memcpy_orig_stop = get_cycle_count();
 
-  uint32_t memmove_new_start = get_cycle_count();
+  uint32_t memcpy_new_start = get_cycle_count();
   memcpy_(&(actual[dest_offset]), &(actual[src_offset]), data_len);
-  uint32_t memmove_new_stop = get_cycle_count();
+  uint32_t memcpy_new_stop = get_cycle_count();
 
 
 
   if(print_performance){
-    uint32_t orig_cycle = memmove_orig_stop-memmove_orig_start;
-    uint32_t new_cycle = memmove_new_stop-memmove_new_start;
+    uint32_t orig_cycle = memcpy_orig_stop-memcpy_orig_start;
+    uint32_t new_cycle = memcpy_new_stop-memcpy_new_start;
     int32_t cycle_diff = orig_cycle - new_cycle;
     printfln_("%-6u %-#10x %-#10x %-8u %-8u %-8d", data_len, src_offset, dest_offset, orig_cycle, new_cycle, cycle_diff);
   }
